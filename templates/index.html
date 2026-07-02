@@ -316,14 +316,26 @@ function renderCalendar(year) {
   });
 }
 
+const STORAGE_KEY = "invoice_history";
+
 function loadHistory() {
-  fetch("/history")
-    .then(r => r.json())
-    .then(data => {
-      historyData = data.entries || [];
-      renderCalendar(calYearVal);
-    })
-    .catch(() => {});
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    historyData = data ? JSON.parse(data) : [];
+  } catch(e) {
+    historyData = [];
+  }
+  renderCalendar(calYearVal);
+}
+
+function saveHistory(entry) {
+  historyData.push(entry);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(historyData));
+  } catch(e) {
+    console.error("Failed to save history", e);
+  }
+  renderCalendar(calYearVal);
 }
 
 calPrev.addEventListener("click", () => { calYearVal--; renderCalendar(calYearVal); });
@@ -360,7 +372,18 @@ form.addEventListener("submit", async (e) => {
     URL.revokeObjectURL(url);
 
     showToast("Downloaded " + dlName);
-    loadHistory(); // Refresh calendar
+    const fdata = new FormData(form);
+    const hEntry = {
+      customer_key: customerSelect.value,
+      customer_name: CUSTOMER_NAMES[CUSTOMER_KEYS.indexOf(customerSelect.value)],
+      month: monthInput.value,
+      code: monthInput.value.replace("-", ""),
+      invoice_no: document.getElementById("field-invoice_no")?.value || "",
+      description: document.getElementById("field-description")?.value || "",
+      amount: document.getElementById("field-amount")?.value || "",
+      generated_at: new Date().toISOString().slice(0, 16).replace("T", " ")
+    };
+    saveHistory(hEntry); // Refresh calendar
   } catch (err) {
     showToast("Error: " + err.message);
   } finally {

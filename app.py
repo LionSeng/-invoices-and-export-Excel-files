@@ -5,7 +5,6 @@ import openpyxl
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HISTORY_PATH = os.path.join(BASE_DIR, "history.json")
 
 CUSTOMERS = {
     "PureSpectrum": {
@@ -102,37 +101,8 @@ def generate_excel(customer_key, raw_fields, month_str):
     wb.save(out_path)
     wb.close()
 
-    _record_history(
-        customer_key, cfg["display_name"], month_str, code,
-        resolved.get("invoice_no", ""),
-        resolved.get("description", ""),
-        str(resolved.get("amount", "")),
-    )
-    return out_path, out_name
 
-def _record_history(customer_key, customer_name, month_str, code, invoice_no, description, amount):
-    entries = []
-    if os.path.exists(HISTORY_PATH):
-        # Backup before modifying
-        bak_path = HISTORY_PATH + ".bak"
-        try:
-            shutil.copy2(HISTORY_PATH, bak_path)
-        except IOError:
-            pass
-        try:
-            with open(HISTORY_PATH, "r", encoding="utf-8") as f:
-                entries = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            entries = []
-    entry = {
-        "customer_key": customer_key, "customer_name": customer_name,
-        "month": month_str, "code": code,
-        "invoice_no": invoice_no, "description": description, "amount": amount,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-    entries.append(entry)
-    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2, ensure_ascii=False)
+    return out_path, out_name
 
 @app.route("/")
 def index():
@@ -152,19 +122,3 @@ def generate():
         import traceback; traceback.print_exc()
         return f"Error generating Excel: {e}", 500
 
-@app.route("/history")
-def history():
-    entries = []
-    if os.path.exists(HISTORY_PATH):
-        try:
-            with open(HISTORY_PATH, "r", encoding="utf-8") as f:
-                entries = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    return jsonify(entries=entries)
-
-if __name__ == "__main__":
-    port = 5000
-    print(f"  Invoice Generator started -> http://localhost:{port}")
-    print("  Press Ctrl+C to stop.")
-    app.run(host="127.0.0.1", port=port, debug=False)
