@@ -1,0 +1,16 @@
+﻿# Generated data
+outputs/
+history.json
+history.json.bak
+
+# Work directory (sample copies)
+work/
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db

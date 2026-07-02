@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice Generator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f5f6f8;
+    color: #1a1a1e;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px;
+  }
+  .app { width: 100%; max-width: 960px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 720px) { .app { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    padding: 24px;
+  }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 3px; }
+  select, input[type="text"], input[type="number"], input[type="month"] {
+    width: 100%; padding: 7px 10px; font-size: 13px;
+    border: 1px solid #d1d5db; border-radius: 5px; background: #fff; font-family: inherit;
+  }
+  select:focus, input:focus {
+    outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+  }
+  .field-hint { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .btn {
+    width: 100%; padding: 9px 14px; font-size: 13px; font-weight: 600;
+    border: none; border-radius: 5px; cursor: pointer; transition: background .15s, transform .1s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-primary { background: #4f46e5; color: #fff; margin-top: 6px; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-primary:active { transform: scale(.98); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Calendar */
+  .cal-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .cal-toolbar button {
+    background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; font-size: 13px; font-weight: 500;
+  }
+  .cal-toolbar button:hover { background: #e5e7eb; }
+  .cal-toolbar .year-label { font-size: 15px; font-weight: 600; flex: 1; text-align: center; }
+  .cal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cal-month {
+    border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 8px;
+    cursor: pointer; transition: all .15s; position: relative;
+  }
+  .cal-month:hover { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.12); }
+  .cal-month .month-name { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .cal-month .month-status { font-size: 10px; }
+  .cal-month.all-set { background: #ecfdf5; border-color: #6ee7b7; }
+  .cal-month.all-set .month-status { color: #059669; }
+  .cal-month.partial { background: #fefce8; border-color: #fde68a; }
+  .cal-month.partial .month-status { color: #b45309; }
+  .cal-month.none-set { background: #f9fafb; border-color: #e5e7eb; }
+  .cal-month.none-set .month-status { color: #9ca3af; }
+  .cal-month.future { opacity: .4; pointer-events: none; }
+  .cal-month .cal-cust-list { font-size: 10px; color: #6b7280; margin-top: 2px; }
+  .cal-month .cal-cust-list span { display: inline-block; margin-right: 4px; }
+  .cal-month .badge {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 2px;
+  }
+  .cal-month .badge.done { background: #10b981; }
+  .cal-month .badge.missing { background: #d1d5db; }
+
+  .subtitle { font-size: 12px; color: #6b7280; margin-bottom: 14px; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #f9fafb; padding: 10px 20px;
+    border-radius: 8px; font-size: 13px; font-weight: 500;
+    z-index: 100; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .auto-badge {
+    display: inline-block; font-size: 10px; color: #6366f1; font-weight: 400;
+    background: #eef2ff; border-radius: 3px; padding: 0 5px; margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Left: Form -->
+  <div class="card">
+    <h2>Invoice Generator</h2>
+    <p class="subtitle">Select month & customer, then export to Excel.</p>
+    <form id="invoice-form" method="post" action="/generate">
+      <div class="form-group">
+        <label for="month">Invoice Month</label>
+        <input type="month" id="month" name="month" required>
+      </div>
+      <div class="form-group">
+        <label for="customer">Customer</label>
+        <select id="customer" name="customer" required>
+          {% for key, cfg in customers.items() %}
+          <option value="{{ key }}">{{ cfg.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="fields-container"></div>
+      <button type="submit" class="btn btn-primary" id="submit-btn">
+        <svg><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        Download Excel
+      </button>
+    </form>
+  </div>
+
+  <!-- Right: Calendar -->
+  <div class="card">
+    <h2>Invoice History</h2>
+    <p class="subtitle" id="cal-subtitle">Click a month to pre-fill the form.</p>
+    <div class="cal-toolbar">
+      <button id="cal-prev">&larr;</button>
+      <span class="year-label" id="cal-year">2026</span>
+      <button id="cal-next">&rarr;</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CUSTOMER_KEYS = {{ customers.keys() | list | tojson }};
+const CUSTOMER_NAMES = {{ customers.values() | map(attribute='display_name') | list | tojson }};
+const CUSTOMER_FIELDS = {
+  {% for key, cfg in customers.items() %}
+  "{{ key }}": {{ cfg.fields | tojson }},
+  {% endfor %}
+};
+const INVOICE_PATTERNS = {
+  {% for key, cfg in customers.items() %}
+  "{{ key }}": {{ cfg.invoice_pattern | tojson if cfg.invoice_pattern else 'null' }},
+  {% endfor %}
+};
+const DESC_PATTERNS = {
+  {% for key, cfg in customers.items() %}
+  "{{ key }}": {{ cfg.desc_pattern | tojson if cfg.desc_pattern else 'null' }},
+  {% endfor %}
+};
+
+const container = document.getElementById("fields-container");
+const customerSelect = document.getElementById("customer");
+const monthInput = document.getElementById("month");
+const form = document.getElementById("invoice-form");
+const submitBtn = document.getElementById("submit-btn");
+const toast = document.getElementById("toast");
+const calGrid = document.getElementById("cal-grid");
+const calYear = document.getElementById("cal-year");
+const calPrev = document.getElementById("cal-prev");
+const calNext = document.getElementById("cal-next");
+
+let historyData = [];
+let calYearVal = new Date().getFullYear();
+let toastTimer = null;
+
+// Set default month to current
+const now = new Date();
+monthInput.value = now.toISOString().slice(0, 7);
+
+// ?? Month helpers ???????????????????????????????????????????????????
+const MONTH_NAMES = ["", "January", "February", "March", "April", "May", "June",
+                     "July", "August", "September", "October", "November", "December"];
+const MONTH_ABBRS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parseMonth(monthStr) {
+  const p = monthStr.split("-");
+  return { year: parseInt(p[0]), month: parseInt(p[1]) };
+}
+
+function resolvePattern(pattern, year, month) {
+  if (!pattern) return "";
+  const mm = String(month).padStart(2, "0");
+  const m = String(month);
+  const yy = String(year % 100).padStart(2, "0");
+  const yyyy = String(year);
+  const mn = MONTH_NAMES[month];
+  const ma = MONTH_ABBRS[month];
+  return pattern.replace(/{YY}/g, yy).replace(/{YYYY}/g, yyyy)
+                .replace(/{MM}/g, mm).replace(/{M}/g, m)
+                .replace(/{MonthName}/g, mn).replace(/{MonthAbbr}/g, ma);
+}
+
+function autoGenerateFields() {
+  const key = customerSelect.value;
+  const mVal = monthInput.value;
+  if (!mVal) return;
+  const { year, month } = parseMonth(mVal);
+
+  const invPat = INVOICE_PATTERNS[key];
+  const descPat = DESC_PATTERNS[key];
+
+  const invNo = document.getElementById("field-invoice_no");
+  const desc = document.getElementById("field-description");
+
+  if (invNo && invPat) {
+    const auto = resolvePattern(invPat, year, month);
+    if (!invNo.dataset.userEdited) invNo.value = auto;
+  }
+  if (desc && descPat) {
+    const auto = resolvePattern(descPat, year, month);
+    if (!desc.dataset.userEdited) desc.value = auto;
+  }
+}
+
+// ?? Render form fields ??????????????????????????????????????????????
+function renderFields() {
+  const key = customerSelect.value;
+  const fields = CUSTOMER_FIELDS[key] || [];
+  container.innerHTML = "";
+  let html = "";
+
+  for (const f of fields) {
+    const id = "field-" + f.id;
+    const isMarketCube = key === "MarketCube";
+    const showOnlyMarketCube = ["contact", "tax_id"].includes(f.id);
+    if (showOnlyMarketCube && !isMarketCube) continue;
+
+    let ph = "";
+    if (f.id === "item_desc") ph = "Leave blank to use Description";
+
+    html += `<div class="form-group"><label for="${id}">${f.label}`;
+    if (f.id === "invoice_no" && INVOICE_PATTERNS[key]) html += ` <span class="auto-badge">auto</span>`;
+    if (f.id === "description" && DESC_PATTERNS[key]) html += ` <span class="auto-badge">auto</span>`;
+    html += `</label>`;
+
+    if (f.type === "number") {
+      html += `<input type="number" step="0.01" min="0" id="${id}" name="${f.id}" placeholder="${ph}" required>`;
+    } else {
+      html += `<input type="text" id="${id}" name="${f.id}" placeholder="${ph}" required>`;
+    }
+    if (f.id === "item_desc") html += `<div class="field-hint">Leave blank to auto-fill from Description.</div>`;
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Track manual edits
+  container.querySelectorAll("input").forEach(el => {
+    el.addEventListener("input", () => {
+      el.dataset.userEdited = "1";
+    });
+  });
+
+  autoGenerateFields();
+}
+
+// ?? Calendar ????????????????????????????????????????????????????????
+function renderCalendar(year) {
+  calYear.textContent = year;
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1;
+  let html = "";
+
+  for (let m = 1; m <= 12; m++) {
+    const monthKey = year + "-" + String(m).padStart(2, "0");
+    const isFuture = year > nowYear || (year === nowYear && m > nowMonth);
+
+    // Gather history entries for this month
+    const entries = historyData.filter(e => e.month === monthKey);
+    // Check which customers are covered
+    const coveredCusts = new Set(entries.map(e => e.customer_key));
+    const totalCusts = CUSTOMER_KEYS.length;
+    const covered = coveredCusts.size;
+
+    let cssClass = "cal-month";
+    if (isFuture) cssClass += " future";
+    else if (covered === totalCusts) cssClass += " all-set";
+    else if (covered > 0) cssClass += " partial";
+    else cssClass += " none-set";
+
+    const statusText = covered === 0 ? "Not invoiced"
+                      : covered === totalCusts ? "All invoiced"
+                      : (covered + "/" + totalCusts + " invoiced");
+
+    html += `<div class="${cssClass}" data-month="${monthKey}" data-year="${year}" data-month-num="${m}">`;
+    html += `<div class="month-name">${MONTH_ABBRS[m]}</div>`;
+    html += `<div class="month-status">${statusText}</div>`;
+    if (covered > 0) {
+      html += `<div class="cal-cust-list">`;
+      for (const ck of CUSTOMER_KEYS) {
+        const hasIt = coveredCusts.has(ck);
+        html += `<span><span class="badge ${hasIt ? 'done' : 'missing'}"></span>${CUSTOMER_NAMES[CUSTOMER_KEYS.indexOf(ck)]}</span>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  calGrid.innerHTML = html;
+
+  // Click handler
+  calGrid.querySelectorAll(".cal-month:not(.future)").forEach(el => {
+    el.addEventListener("click", () => {
+      const monthKey = el.dataset.month;
+      monthInput.value = monthKey;
+      // Reset user-edited flags
+      container.querySelectorAll("input").forEach(inp => delete inp.dataset.userEdited);
+      autoGenerateFields();
+      showToast("Selected " + MONTH_NAMES[parseInt(el.dataset.monthNum)] + " " + year);
+    });
+  });
+}
+
+function loadHistory() {
+  fetch("/history")
+    .then(r => r.json())
+    .then(data => {
+      historyData = data.entries || [];
+      renderCalendar(calYearVal);
+    })
+    .catch(() => {});
+}
+
+calPrev.addEventListener("click", () => { calYearVal--; renderCalendar(calYearVal); });
+calNext.addEventListener("click", () => { calYearVal++; renderCalendar(calYearVal); });
+
+// ?? Toast ????????????????????????????????????????????????????????????
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+// ?? Submit ???????????????????????????????????????????????????????????
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!monthInput.value) { showToast("Please select a month."); return; }
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = "Generating...";
+
+  try {
+    const resp = await fetch("/generate", { method: "POST", body: new FormData(form) });
+    if (!resp.ok) throw new Error(await resp.text() || resp.statusText);
+    const blob = await resp.blob();
+    const disposition = resp.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const dlName = match ? match[1].replace(/['"]/g, "") : "invoice.xlsx";
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = dlName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast("Downloaded " + dlName);
+    loadHistory(); // Refresh calendar
+  } catch (err) {
+    showToast("Error: " + err.message);
+  } finally {
+    submitBtn.innerHTML = `<svg><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Download Excel`;
+    submitBtn.disabled = false;
+  }
+});
+
+// ?? Events ??????????????????????????????????????????????????????????
+customerSelect.addEventListener("change", () => {
+  // Reset user-edited flags for fields that should re-auto-generate
+  container.querySelectorAll("input").forEach(inp => delete inp.dataset.userEdited);
+  renderFields();
+});
+
+monthInput.addEventListener("change", () => {
+  container.querySelectorAll("input").forEach(inp => {
+    // Only reset for auto-generated fields
+    if (["field-invoice_no", "field-description"].includes(inp.id)) {
+      delete inp.dataset.userEdited;
+    }
+  });
+  autoGenerateFields();
+});
+
+// ?? Init ????????????????????????????????????????????????????????????
+renderFields();
+loadHistory();
+</script>
+</body>
+</html>
