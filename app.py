@@ -122,3 +122,7 @@ def generate():
         import traceback; traceback.print_exc()
         return f"Error generating Excel: {e}", 500
 
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
